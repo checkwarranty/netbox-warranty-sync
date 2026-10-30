@@ -112,7 +112,7 @@ class NetBoxClient:
     def __init__(self, base_url: str, api_token: str):
         self.base_url = (base_url or "").strip().rstrip("/")
         self.headers = {
-            "Authorization": f"Token {api_token}",
+            "Authorization": ("Bearer " if api_token.strip().startswith("nbt_") else "Token ") + api_token.strip(),
             "Accept": "application/json",
             "Content-Type": "application/json",
             "User-Agent": "CheckWarranty-NetBox-Sync/1.0",

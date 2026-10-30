@@ -19,3 +19,6 @@ class ContractTests(unittest.TestCase):
 
     def test_malformed_date_is_ignored(self):
         self.assertIsNone(sync.format_iso_to_date({"bad":"date"}))
+
+    def test_netbox_v2_uses_bearer_auth(self):
+        self.assertEqual(sync.NetBoxClient("https://netbox.test", "nbt_test.secret").headers["Authorization"], "Bearer nbt_test.secret")

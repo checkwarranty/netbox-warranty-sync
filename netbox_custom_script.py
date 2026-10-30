@@ -35,14 +35,10 @@ class CheckWarrantySyncScript(Script):
     class Meta:
         name = "CheckWarranty Hardware Warranty Sync"
         description = "Query vendor APIs via CheckWarranty and populate device warranty expiration dates & specs."
-        field_order = ["api_url", "dry_run", "force", "recheck_days", "manufacturers"]
+        field_order = ["plan_only", "dry_run", "force", "recheck_days", "manufacturers"]
 
     if NETBOX_INSTALLED:
-        api_url = StringVar(
-            default="https://checkwarranty.info/api/v1",
-            description="CheckWarranty API Base URL",
-            required=False
-        )
+        plan_only = BooleanVar(default=True, description="List candidates without API requests or credit use")
         dry_run = BooleanVar(
             default=True,
             description="Simulate sync without saving changes to NetBox"
@@ -119,7 +115,10 @@ class CheckWarrantySyncScript(Script):
             raise RuntimeError("NetBox dependencies are not available in this environment.")
 
         api_key = os.environ.get("CHECKWARRANTY_API_KEY", "")
-        api_url = data.get("api_url") or "https://checkwarranty.info/api/v1"
+        api_url = os.environ.get("CHECKWARRANTY_API_URL", "https://checkwarranty.info/api/v1")
+        plan_only = data.get("plan_only", True)
+        if not plan_only and not api_key:
+            raise RuntimeError("CHECKWARRANTY_API_KEY is not configured on the worker")
         dry_run = data.get("dry_run", True)
         force = data.get("force", False)
         recheck_days = data.get("recheck_days", 30)
@@ -160,30 +159,48 @@ class CheckWarrantySyncScript(Script):
                 brand = "apple"
 
             self.log_info(f"Looking up {dev.name or dev.serial} ({dev.serial})...")
+            if plan_only:
+                self.log_info(f"[PLAN] {dev.name}: lookup required; no API request sent")
+                continue
             res = self._query_checkwarranty(api_url, api_key, serial, brand)
 
             if not res or res.get("status") == "not_found":
                 self.log_warning(f"Device {serial} not found in vendor database.")
                 continue
 
-            warranty = res.get("warranty", {}) or {}
-            end_date_str = warranty.get("endDate")
-            if not end_date_str:
-                self.log_warning(f"No warranty end date returned for {serial}.")
+            if res.get("status") != "completed":
+                self.log_warning(f"Lookup did not complete for {serial}")
                 continue
+            warranty = res.get("warranty", {}) or {}
+            details = warranty.get("details") or {}
+            end_date_str = warranty.get("endDate")
+            changes = {}
+            if isinstance(end_date_str, str):
+                clean_end_date = end_date_str.split("T")[0]
+                try:
+                    datetime.strptime(clean_end_date, "%Y-%m-%d")
+                    changes["warranty_expiration"] = clean_end_date
+                except ValueError:
+                    pass
+            if warranty.get("status") in ("active", "expired"):
+                changes["warranty_status"] = warranty["status"].capitalize()
+            tier = warranty.get("coverageType")
+            if isinstance(tier, str) and tier:
+                changes["support_tier"] = tier[:100]
+            specs = []
+            if isinstance(details, dict):
+                for source, label in (("processor", "CPU"), ("memory", "RAM"), ("hardDrive", "Disk")):
+                    value = details.get(source)
+                    if isinstance(value, str) and value.strip().lower() not in ("", "n/a", "unknown", "none", "-"):
+                        specs.append(label + ": " + value)
+            if specs:
+                changes["factory_specs"] = " | ".join(specs)
+            if not changes:
+                self.log_warning(f"No useful mapped data for {serial}")
+                continue
+            dev.custom_field_data.update(changes)
 
-            clean_end_date = end_date_str.split("T")[0]
-            status = warranty.get("status")
-            is_active = True if status == "active" else False if status == "expired" else None
-            tier = warranty.get("coverageType") or warranty.get("description") or ""
-
-            dev.custom_field_data["warranty_expiration"] = clean_end_date
-            if is_active is not None:
-                dev.custom_field_data["warranty_status"] = "Active" if is_active else "Expired"
-            if tier:
-                dev.custom_field_data["support_tier"] = tier[:100]
-
-            self.log_success(f"[{'DRY-RUN' if dry_run else 'COMMITTED'}] Device {dev.name or dev.serial}: warranty until {clean_end_date} ({tier})")
+            self.log_success(f"[{'DRY-RUN' if dry_run else 'COMMITTED'}] Device {dev.name or dev.serial}: warranty/specs updated")
 
             if commit and not dry_run:
                 dev.full_clean()

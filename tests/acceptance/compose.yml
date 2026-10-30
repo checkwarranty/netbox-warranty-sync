@@ -1,0 +1,38 @@
+name: checkwarranty-netbox-acceptance
+services:
+  netbox:
+    image: netboxcommunity/netbox:v4.7-5.1.1
+    ports: ["127.0.0.1:18082:8080"]
+    environment:
+      DB_HOST: postgres
+      DB_NAME: netbox
+      DB_USER: netbox
+      DB_PASSWORD: acceptance-only
+      REDIS_HOST: redis
+      REDIS_PASSWORD: acceptance-only
+      REDIS_CACHE_HOST: redis
+      REDIS_CACHE_PASSWORD: acceptance-only
+      SECRET_KEY: acceptance-only-not-production-0123456789-0123456789-0123456789
+      API_TOKEN_PEPPER_1: acceptance-only-pepper-not-for-production-0123456789
+      CHECKWARRANTY_API_KEY: acceptance-sandbox-only
+      CHECKWARRANTY_API_URL: http://mock:8000/api/v1
+      SKIP_SUPERUSER: "true"
+      ALLOWED_HOSTS: "*"
+    depends_on: [postgres, redis]
+    volumes:
+      - .:/opt/cw-testing:ro
+      - ../../netbox_custom_script.py:/opt/cw-script.py:ro
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: netbox
+      POSTGRES_USER: netbox
+      POSTGRES_PASSWORD: acceptance-only
+  redis:
+    image: redis:7-alpine
+    command: [redis-server, --requirepass, acceptance-only]
+  mock:
+    image: python:3.11-alpine
+    command: [python, /mock_api.py]
+    volumes:
+      - ./mock_api.py:/mock_api.py:ro
