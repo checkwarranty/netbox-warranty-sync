@@ -8,5 +8,6 @@ for attempt in $(seq 1 120); do
   sleep 5
 done
 $ready || { docker compose logs --tail=100; exit 1; }
-docker compose exec -T netbox /opt/netbox/venv/bin/python /opt/netbox/netbox/manage.py shell -c "exec(open('/opt/cw-testing/seed.py').read())" | tail -n 1 > /tmp/cw-netbox-auth.json
+docker compose exec -T netbox /opt/netbox/venv/bin/python /opt/netbox/netbox/manage.py shell -c "exec(open('/opt/cw-testing/seed.py').read())"
+docker compose cp netbox:/tmp/cw-netbox-auth.json /tmp/cw-netbox-auth.json
 python3 runtime.py

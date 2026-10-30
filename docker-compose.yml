@@ -6,4 +6,9 @@ services:
     env_file:
       - .env
     command: ["--dry-run", "--limit", "50"]
+    volumes:
+      - sync-state:/state
     restart: "no"
+
+volumes:
+  sync-state:

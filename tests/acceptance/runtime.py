@@ -20,8 +20,11 @@ args = argparse.Namespace(dry_run=False, plan=True, limit=100, force=True, reche
 sync.run_sync(args)
 assert not REQUESTS, "Plan mode must not call B2B API"
 args.plan = False
+args.state_file = "/tmp/cw-netbox-cursor.json"
+args.limit = 2
 with patch.object(sync.time, "sleep"):
-    sync.run_sync(args)
+    for _ in range(3):
+        sync.run_sync(args)
 client = sync.NetBoxClient(os.environ["NETBOX_URL"], auth["token"])
 rows = {row["serial"]: row for row in client.get_devices(total_limit=100)}
 assert rows["TEST-ENDONLY"]["custom_fields"]["warranty_expiration"] == "2027-01-05"

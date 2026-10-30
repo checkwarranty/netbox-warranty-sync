@@ -31,6 +31,11 @@ except ImportError:
     Device = Manufacturer = None
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
 class CheckWarrantySyncScript(Script):
     class Meta:
         name = "CheckWarranty Hardware Warranty Sync"
@@ -73,7 +78,7 @@ class CheckWarrantySyncScript(Script):
         body = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(url, data=body, headers=headers, method="POST")
         try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
+            with urllib.request.build_opener(_NoRedirect()).open(req, timeout=30) as resp:
                 res_body = resp.read().decode("utf-8")
                 res = json.loads(res_body) if res_body else {}
                 if res.get("status") in ("in_progress", "pending") and res.get("batchId"):
@@ -99,7 +104,7 @@ class CheckWarrantySyncScript(Script):
         for _ in range(retries):
             time.sleep(4)
             try:
-                with urllib.request.urlopen(req, timeout=30) as resp:
+                with urllib.request.build_opener(_NoRedirect()).open(req, timeout=30) as resp:
                     res = json.loads(resp.read().decode("utf-8"))
                     if res.get("status") in ("completed", "partial"):
                         items = res.get("items", [])
@@ -124,7 +129,17 @@ class CheckWarrantySyncScript(Script):
         recheck_days = data.get("recheck_days", 30)
         selected_mfg = data.get("manufacturers")
 
-        query = Device.objects.exclude(serial="").exclude(serial__isnull=True)
+        request = getattr(self, "request", None)
+        user = getattr(request, "user", None)
+        if user is None or not user.is_authenticated:
+            raise RuntimeError("Authenticated script request required")
+        from django.core.cache import cache
+        cursor_key = f"checkwarranty:script:cursor:{user.pk}"
+        cursor = int(cache.get(cursor_key, 0))
+        query = Device.objects.restrict(user, "view").exclude(serial="").exclude(serial__isnull=True)
+        if not plan_only:
+            query = query.restrict(user, "change")
+        query = query.filter(pk__gt=cursor).order_by("pk")
         if selected_mfg:
             query = query.filter(device_type__manufacturer__in=selected_mfg)
 
@@ -135,6 +150,8 @@ class CheckWarrantySyncScript(Script):
         skipped_count = 0
 
         for dev in devices:
+            if not plan_only:
+                cache.set(cursor_key, dev.pk, timeout=None)
             serial = dev.serial.strip()
             existing_exp = dev.custom_field_data.get("warranty_expiration")
 
@@ -208,4 +225,6 @@ class CheckWarrantySyncScript(Script):
 
             updated_count += 1
 
+        if not devices and not plan_only:
+            cache.set(cursor_key, 0, timeout=None)
         self.log_info(f"Sync complete. Updated: {updated_count}, Skipped: {skipped_count}")
