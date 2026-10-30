@@ -1,0 +1,2 @@
+# Optional convenience dependencies (script also runs with standard library only)
+python-dotenv>=1.0.0

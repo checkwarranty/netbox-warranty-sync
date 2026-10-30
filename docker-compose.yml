@@ -1,0 +1,9 @@
+version: '3.8'
+
+services:
+  checkwarranty-netbox-sync:
+    build: .
+    env_file:
+      - .env
+    command: ["--dry-run", "--limit", "50"]
+    restart: "no"
