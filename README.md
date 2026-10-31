@@ -127,7 +127,8 @@ If you prefer running syncs directly from the NetBox web interface:
    ```
 2. Open NetBox Web UI &rarr; **Customization &rarr; Custom Scripts**.
 3. Select **CheckWarranty Hardware Warranty Sync**.
-4. Fill in your CheckWarranty API key, select filters or toggle **Dry Run**, and click **Run Script**.
+4. Configure `CHECKWARRANTY_API_KEY` and optionally `CHECKWARRANTY_API_URL` in the NetBox worker environment. Credentials and API URLs are never collected in job forms.
+5. Select filters and use **Plan only** first. Disable it to allow API requests (which may consume credits); **Dry Run** independently prevents writes. The script restricts devices to the current user’s view/change permissions and rotates batches using the NetBox cache.
 
 Logs and direct links to updated devices will appear in real time in the NetBox execution view.
 
@@ -154,7 +155,7 @@ Logs and direct links to updated devices will appear in real time in the NetBox 
 To prevent unnecessary B2B API credit usage:
 * **Active Warranty Protection:** Devices with a valid warranty date in the future are skipped by default.
 * **Smart Renewal Buffer (`--recheck-days`):** Set `--recheck-days 30` in monthly cron jobs to only re-query servers approaching contract renewal.
-* **Idempotency Keys:** Every request carries a unique UUID idempotency key to prevent double-billing on network retries.
+* **Idempotency Keys:** Each lookup uses one idempotency key. New scheduled invocations create new keys; this is not a cross-run scan cache.
 
 ---
 

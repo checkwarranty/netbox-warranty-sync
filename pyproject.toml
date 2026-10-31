@@ -11,6 +11,7 @@ authors = [
 description = "Sync hardware warranty expiration dates and specs into NetBox DCIM via CheckWarranty API"
 readme = "README.md"
 requires-python = ">=3.8"
+license = { text = "MIT" }
 dependencies = [
   "python-dotenv>=1.0.0",
 ]
@@ -27,3 +28,7 @@ checkwarranty-netbox-sync = "checkwarranty_netbox_sync:main"
 
 [tool.setuptools]
 packages = ["checkwarranty_netbox_sync"]
+
+[project.urls]
+Homepage = "https://github.com/checkwarranty/netbox-warranty-sync"
+Issues = "https://github.com/checkwarranty/netbox-warranty-sync/issues"
